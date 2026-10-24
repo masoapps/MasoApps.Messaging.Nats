@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Version>6.0.0</Version>
+        <PackageId>MasoApps.Messaging.Nats</PackageId>
+        <Description>NATS JetStream messaging for .NET hosts: attribute-based durable consumers, acked publishing with retries, message schedules, a dead-letter stream with replay, health checks and OpenTelemetry.</Description>
+        <Authors>Maso Apps</Authors>
+        <Company>Maso Apps</Company>
+        <Copyright>Copyright (c) 2026 Maso Apps</Copyright>
+        <PackageProjectUrl>https://github.com/masoapps/MasoApps.Messaging.Nats</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/masoapps/MasoApps.Messaging.Nats</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>nats;jetstream;messaging;pubsub;scheduling;dead-letter;opentelemetry</PackageTags>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="NATS.Net" Version="2.7.3" />
+      <PackageReference Include="NATS.Client.Serializers.Json" Version="2.7.3" />
+      <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <InternalsVisibleTo Include="Messaging.NATS.IntegrationTests" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Include="..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      NATS_SERVER_VERSION: '2.12.15'
+      # The R3 cluster and spare-port tests fail instead of ending Inconclusive when they cannot run.
+      NATS_REQUIRE_SERVER_TESTS: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install nats-server
+        run: |
+          curl -sSfL "https://github.com/nats-io/nats-server/releases/download/v${NATS_SERVER_VERSION}/nats-server-v${NATS_SERVER_VERSION}-linux-amd64.tar.gz" -o nats-server.tar.gz
+          tar -xzf nats-server.tar.gz
+          sudo mv "nats-server-v${NATS_SERVER_VERSION}-linux-amd64/nats-server" /usr/local/bin/nats-server
+          nats-server --version
+
+      # The single-server tests use a Testcontainers nats:<NATS_SERVER_VERSION> container; the cluster tests start
+      # nats-server on free ports.
+      - name: Test
+        run: dotnet test Messaging.NATS.IntegrationTests --configuration Release
