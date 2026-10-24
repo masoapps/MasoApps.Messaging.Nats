@@ -423,19 +423,22 @@ public class ScheduleTests : NatsTestBase
         await using var f = await ScheduleFixture.CreateAsync();
         const int count = 1000;
         var key = new ScheduleOptions { Key = "k" };
-        var fireAt = DateTimeOffset.UtcNow.AddSeconds(4);
+        // Lead time and window are sized for slow 2-core CI runners: the old schedules must all be stored before the
+        // window opens, and the earliest Replaces must return before the fire time.
+        var fireAt = DateTimeOffset.UtcNow.AddSeconds(10);
         await Task.WhenAll(Enumerable.Range(0, count).Select(i =>
             f.Publisher.ScheduleAsync($"{f.Root}.t{i}", new TestMessage("old"), fireAt, key)));
 
-        // One Replace per key, spread from 250 ms before to 250 ms after the fire instant. With one holder subject
+        // One Replace per key, spread from 1 s before to 250 ms after the fire instant. With one holder subject
         // per key, a Replace stored while the old holder fired was purged by the fire (nats-server 2.12.1).
         Assert.AreEqual((long)count, await HolderCountAsync(f), "Every old schedule is pending before the Replaces");
-        var start = fireAt.AddMilliseconds(-250);
+        var start = fireAt.AddMilliseconds(-1000);
+        Assert.IsTrue(DateTimeOffset.UtcNow < start, "The old schedules took too long to store; the race window has passed");
         await ScheduleRaces.DelayUntil(start);
         var replacements = new List<Task<(ScheduleResult Result, DateTimeOffset ReturnedAt)>>();
         for (var i = 0; i < count; i++)
         {
-            var sendAt = start + TimeSpan.FromTicks(TimeSpan.FromMilliseconds(500).Ticks * i / count);
+            var sendAt = start + TimeSpan.FromTicks(TimeSpan.FromMilliseconds(1250).Ticks * i / count);
             while (DateTimeOffset.UtcNow < sendAt)
             {
                 Thread.SpinWait(50);
