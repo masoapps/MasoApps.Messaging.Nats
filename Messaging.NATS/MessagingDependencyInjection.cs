@@ -52,13 +52,17 @@ public static class MessagingDependencyInjection
         }
 
         // "opts with", not "NatsOpts.Default with", keeps the LoggerFactory the hosting package sets.
-        services.AddNats(configureOpts: opts => opts with
+        services.AddNats(configureOpts: opts =>
         {
-            Url = options.NatsUrl,
-            Name = options.ServiceName ?? opts.Name,
-            SerializerRegistry = serializerRegistry,
-            AuthOpts = opts.AuthOpts with { CredsFile = options.CredsFilePath },
-            RetryOnInitialConnect = options.RetryOnInitialConnect
+            opts = opts with
+            {
+                Url = options.NatsUrl,
+                Name = options.ServiceName ?? opts.Name,
+                SerializerRegistry = serializerRegistry,
+                AuthOpts = opts.AuthOpts with { CredsFile = options.CredsFilePath },
+                RetryOnInitialConnect = options.RetryOnInitialConnect
+            };
+            return options.ConfigureNatsOpts?.Invoke(opts) ?? opts;
         });
 
         services.AddSingleton<NatsJSContext>(sp => new NatsJSContext(sp.GetRequiredService<NatsConnection>()));

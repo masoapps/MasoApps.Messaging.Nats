@@ -102,6 +102,7 @@ The call returns when the stream has stored the message, or throws
 | `MaxDeliverySlack` | 5 | Deliveries above `MaxDeliveryAttempts` before a forced dead letter. Also the most hand-backs of a message no binding matches. |
 | `MaxHandlerTime` | 30 min | The longest a handler may run on one message, unless the attribute sets `MaxHandlerSeconds`. Zero: no limit. |
 | `RetryOnInitialConnect` | true | Keep retrying the first connection. Set false for short-lived jobs. |
+| `ConfigureNatsOpts` | null | Runs last on the NATS.Net `NatsOpts`, for settings the library does not expose, such as `ReconnectWaitMin`. |
 | `WaitUntilStarted` | false | Host start waits until every component is running. |
 | `StartTimeout` | 60 s | How long `WaitUntilStarted` waits. |
 | `ShutdownTimeout` | 25 s | How long shutdown waits for running handlers. |

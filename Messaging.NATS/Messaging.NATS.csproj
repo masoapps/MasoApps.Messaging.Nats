@@ -4,7 +4,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <Version>6.0.0</Version>
+        <Version>6.1.0</Version>
         <PackageId>MasoApps.Messaging.Nats</PackageId>
         <Description>NATS JetStream messaging for .NET hosts: attribute-based durable consumers, acked publishing with retries, message schedules, a dead-letter stream with replay, health checks and OpenTelemetry.</Description>
         <Authors>Maso Apps</Authors>
