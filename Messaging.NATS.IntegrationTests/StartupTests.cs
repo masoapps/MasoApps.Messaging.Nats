@@ -220,6 +220,27 @@ public class StartupTests
     }
 
     [TestMethod]
+    public async Task ConfigureNatsOpts_RunsLast_AndKeepsTheLibrarySettings()
+    {
+        NatsOpts? seen = null;
+        await using var host = TestHost.Create(o =>
+        {
+            o.ServiceName = "billing-worker";
+            o.ConfigureNatsOpts = opts =>
+            {
+                seen = opts;
+                return opts with { ReconnectWaitMin = TimeSpan.FromMilliseconds(100) };
+            };
+        });
+
+        var connection = host.Services.GetRequiredService<NatsConnection>();
+        Assert.AreEqual("billing-worker", seen!.Name);
+        Assert.AreEqual(TimeSpan.FromMilliseconds(100), connection.Opts.ReconnectWaitMin);
+        Assert.AreEqual("billing-worker", connection.Opts.Name);
+        Assert.AreSame(host.Services.GetRequiredService<ILoggerFactory>(), connection.Opts.LoggerFactory);
+    }
+
+    [TestMethod]
     public async Task RetryOnInitialConnectFalse_WithNoServer_FaultsTheConnection()
     {
         var port = TestEnvironment.UnusedPort();

@@ -2,6 +2,14 @@
 
 All notable changes to MasoApps.Messaging.Nats. Versions follow semantic versioning.
 
+## 6.1.0 - 2026-10-25
+
+### Added
+
+- `NatsMessagingOptions.ConfigureNatsOpts` runs last on the NATS.Net
+  `NatsOpts`. Use it for settings the library does not expose, such as a
+  shorter `ReconnectWaitMin` (NATS.Net waits 2 s before the first reconnect).
+
 ## 6.0.0 - 2026-10-24
 
 First public release, on nuget.org as `MasoApps.Messaging.Nats` (the

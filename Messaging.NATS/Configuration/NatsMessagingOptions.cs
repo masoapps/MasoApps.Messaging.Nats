@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using NATS.Client.Core;
 
 namespace Messaging.NATS;
 
@@ -82,6 +83,12 @@ public class NatsMessagingOptions
     /// Set to false for short-lived jobs that should fail fast.
     /// </summary>
     public bool RetryOnInitialConnect { get; set; } = true;
+
+    /// <summary>
+    /// Runs last on the NATS.Net connection options, for settings the library does not expose (for example
+    /// ReconnectWaitMin). The input already has the library's URL, name, serializer and credentials; keep them.
+    /// </summary>
+    public Func<NatsOpts, NatsOpts>? ConfigureNatsOpts { get; set; }
 
     /// <summary>
     /// When true, host start blocks until every component is running, and throws when one is faulted or
