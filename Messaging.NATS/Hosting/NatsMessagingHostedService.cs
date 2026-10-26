@@ -142,11 +142,9 @@ internal sealed class NatsMessagingHostedService : IHostedService, IDisposable
         NatsMessagingTelemetry.ClearOrphans(this);
     }
 
-    public void Dispose()
-    {
-        _stopping?.Cancel();
-        _stopping?.Dispose();
-    }
+    // Cancel only: a host may dispose this before it calls StopAsync (WebApplicationFactory does), and StopAsync then
+    // cancels again. The source has no timer, so there is nothing to release.
+    public void Dispose() => _stopping?.Cancel();
 
     private async Task RunAsync(CancellationToken token)
     {

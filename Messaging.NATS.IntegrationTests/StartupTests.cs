@@ -282,6 +282,21 @@ public class StartupTests
     }
 
     [TestMethod]
+    public async Task HostedService_DisposedBeforeItIsStopped_StopsWithoutThrowing()
+    {
+        var port = TestEnvironment.UnusedPort();
+        await using var host = await TestHost.StartAsync(o => o.NatsUrl = $"nats://127.0.0.1:{port}");
+        var hosted = host.Services.GetServices<IHostedService>().OfType<NatsMessagingHostedService>().Single();
+
+        // WebApplicationFactory can dispose the services before it stops the host
+        hosted.Dispose();
+        await hosted.StopAsync(CancellationToken.None);
+        hosted.Dispose();
+
+        Assert.IsTrue(host.Status.Components.All(c => c.State == ComponentState.Stopped));
+    }
+
+    [TestMethod]
     public async Task RetryOnInitialConnectFalse_WithNoServer_FaultsTheConnection()
     {
         var port = TestEnvironment.UnusedPort();
