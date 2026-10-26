@@ -241,6 +241,47 @@ public class StartupTests
     }
 
     [TestMethod]
+    public async Task StopBeforeTheFirstConnect_LeavesNoUnobservedTaskException()
+    {
+        var disposedConnects = new List<Exception>();
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            lock (disposedConnects)
+            {
+                disposedConnects.AddRange(e.Exception.InnerExceptions.Where(x =>
+                    x is ObjectDisposedException && x.StackTrace?.Contains("NatsConnection") == true));
+            }
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            var port = TestEnvironment.UnusedPort();
+            for (var i = 0; i < 3; i++)
+            {
+                await using var host = await TestHost.StartAsync(o => o.NatsUrl = $"nats://127.0.0.1:{port}");
+                await Task.Delay(300);
+            }
+
+            for (var i = 0; i < 5; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Task.Delay(200);
+            }
+
+            lock (disposedConnects)
+            {
+                Assert.IsEmpty(disposedConnects, string.Join("\n", disposedConnects));
+            }
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
+    [TestMethod]
     public async Task RetryOnInitialConnectFalse_WithNoServer_FaultsTheConnection()
     {
         var port = TestEnvironment.UnusedPort();

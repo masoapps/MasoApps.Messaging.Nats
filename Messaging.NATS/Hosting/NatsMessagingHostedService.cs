@@ -209,9 +209,19 @@ internal sealed class NatsMessagingHostedService : IHostedService, IDisposable
             return;
         }
 
+        var connecting = _connection.ConnectAsync().AsTask();
         try
         {
-            await _connection.ConnectAsync().AsTask().WaitAsync(token);
+            await connecting.WaitAsync(token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // The connect goes on after a stop and fails once the connection is disposed. Observe that failure, or
+            // the finalizer reports it as an unobserved task exception.
+            _ = connecting.ContinueWith(static t => _ = t.Exception, CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            throw;
         }
         catch (NatsException e) when (_connection.ConnectionState == NatsConnectionState.Failed)
         {

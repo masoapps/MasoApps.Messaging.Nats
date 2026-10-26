@@ -2,6 +2,14 @@
 
 All notable changes to MasoApps.Messaging.Nats. Versions follow semantic versioning.
 
+## 6.1.1 - 2026-10-26
+
+### Fixed
+
+- A host stopped before its first connect no longer leaves an unobserved
+  `ObjectDisposedException` from `NatsConnection.ConnectAsync`. Error
+  trackers such as Sentry reported it from the finalizer thread.
+
 ## 6.1.0 - 2026-10-25
 
 ### Added
