@@ -580,11 +580,18 @@ public class ClusterTests : NatsTestBase
                     $"{payload} carries another schedule's id");
             }
 
+            var missing = schedules.Where(s => !fires.ContainsKey(s.Result.ScheduleId)).ToList();
+            if (missing.Count > 0)
+            {
+                var described = await Task.WhenAll(missing.Take(5).Select(DescribeMissingAsync));
+                Assert.Fail($"{missing.Count} of {schedules.Count} never reached the collector: " +
+                            string.Join("; ", described));
+            }
+
             var duplicates = new List<string>();
             foreach (var scheduled in schedules)
             {
-                var id = scheduled.Result.ScheduleId;
-                Assert.IsTrue(fires.TryGetValue(id, out var stored), $"{scheduled.Payload} ({id}) never fired");
+                var stored = fires[scheduled.Result.ScheduleId];
                 foreach (var fire in stored)
                 {
                     Assert.IsTrue(fire.Stored >= scheduled.Result.DeliverAt - EarlyTolerance,
@@ -617,6 +624,18 @@ public class ClusterTests : NatsTestBase
         {
             await Collector.DisposeAsync();
             await Connection.DisposeAsync();
+        }
+
+        // Tells a lost fire from a late delivery: a fire the collector missed is still in the stream (not acked), and
+        // a schedule that has not fired still has its holder
+        private async Task<string> DescribeMissingAsync(Scheduled scheduled)
+        {
+            var subject = $"{Root}.{scheduled.Payload[..scheduled.Payload.IndexOf('-')]}";
+            var info = await new NatsJSContext(Connection).GetStreamAsync(Stream,
+                new StreamInfoRequest { SubjectsFilter = subject });
+            var onSubject = info.Info.State.Subjects?.Values.Sum(v => (long)v) ?? 0;
+            return $"{scheduled.Payload} ({scheduled.Result.ScheduleId}): {onSubject} message(s) still on {subject}, " +
+                   $"{await HolderCountAsync()} schedule holder(s) left in the stream";
         }
 
         private Dictionary<string, IReadOnlyList<ReceivedMessage>> Fires() =>
