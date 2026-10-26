@@ -2,6 +2,14 @@
 
 All notable changes to MasoApps.Messaging.Nats. Versions follow semantic versioning.
 
+## 6.1.2 - 2026-10-26
+
+### Fixed
+
+- `StopAsync` no longer throws `ObjectDisposedException` when the host disposes
+  the services before it stops them, as `WebApplicationFactory` can do in
+  tests.
+
 ## 6.1.1 - 2026-10-26
 
 ### Fixed
