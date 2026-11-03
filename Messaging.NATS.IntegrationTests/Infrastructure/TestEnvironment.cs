@@ -21,9 +21,10 @@ public static class TestEnvironment
     public static int RequireSparePort() => RequirePorts(SparePortVariable, 1);
 
     /// <summary>
-    /// The first client port of the test cluster.
+    /// The first client port of the test cluster. When the variable is unset, six consecutive free ports are picked:
+    /// three client ports, then three route ports.
     /// </summary>
-    public static int RequireClusterBasePort() => RequirePorts(ClusterBasePortVariable, 3);
+    public static int RequireClusterBasePort() => RequirePorts(ClusterBasePortVariable, 6);
 
     /// <summary>
     /// The first of <paramref name="count"/> consecutive free local ports.

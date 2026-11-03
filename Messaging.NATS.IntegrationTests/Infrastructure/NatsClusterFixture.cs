@@ -11,7 +11,8 @@ namespace Messaging.NATS.IntegrationTests;
 /// <summary>
 /// A 3-node nats-server cluster with JetStream, for the R3 tests. The binary is NATS_SERVER_BIN, or nats-server on
 /// PATH. Client ports are base..base+2 (NATS_CLUSTER_BASE_PORT). Route ports are NATS_CLUSTER_ROUTE_PORT..+2, by
-/// default base+10..base+12. Unix only: a graceful stop sends SIGTERM.
+/// default base+10..base+12, or base+3..base+5 when the base port is picked free. Unix only: a graceful stop sends
+/// SIGTERM.
 /// </summary>
 public sealed class NatsClusterFixture : IAsyncDisposable
 {
@@ -53,9 +54,11 @@ public sealed class NatsClusterFixture : IAsyncDisposable
     {
         var basePortSet = Environment.GetEnvironmentVariable(TestEnvironment.ClusterBasePortVariable) != null;
         var basePort = TestEnvironment.RequireClusterBasePort();
+        // Free ports come from one pick of six. Two picks of three can overlap: nothing is bound in between, and
+        // macOS hands out ephemeral ports in order, so the second pick started at base + 1.
         var routePort = int.TryParse(Environment.GetEnvironmentVariable(RoutePortVariable), out var port)
             ? port
-            : basePortSet ? basePort + 10 : TestEnvironment.FreePorts(3);
+            : basePort + (basePortSet ? 10 : 3);
         return StartAsync(basePort, routePort);
     }
 
