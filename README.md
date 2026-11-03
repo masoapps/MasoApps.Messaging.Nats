@@ -114,7 +114,6 @@ host starts. Among other things it rejects:
 
 - a missing `NatsUrl`, or a service with consumers or request handlers and no
   queue group
-- a request handler that sets both `QueueGroup` and `EveryInstance`
 - an invalid stream definition, or two declared streams whose subjects overlap
 - a dead-letter subject that `DeadLetterStream` does not capture
 - conflicting consumer-level settings across one class's attributes
@@ -1093,11 +1092,8 @@ public sealed class ReserveHandler(IStockService stock) : INatsRequestHandler<Re
 | --- | --- | --- |
 | `Subject` | required | The request subject. |
 | `QueueGroup` | `DefaultQueueGroup`, then `ServiceName` | The queue group. Instances that share it take turns. Whitespace becomes `_`. |
-| `EveryInstance` | false | True: no queue group. Every instance answers each request and the caller takes the first reply. Cannot be combined with `QueueGroup`. |
 
-Use `EveryInstance = true` only for handlers without side effects whose answer
-differs per instance, such as a per-instance status. A request handler with no
-queue group and no `EveryInstance` is rejected at registration.
+A request handler with no queue group is rejected at registration.
 
 `NatsCacheFactory` (a singleton) gives a key-value cache on a JetStream KV bucket:
 

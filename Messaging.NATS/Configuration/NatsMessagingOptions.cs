@@ -41,9 +41,8 @@ public class NatsMessagingOptions
 
     /// <summary>
     /// Default queue group for consumers (the durable name prefix) and request handlers whose attribute does not set
-    /// one. When null, <see cref="ServiceName"/> is used. Every consumer, and every request handler without
-    /// <see cref="NatsRequestHandlerAttribute.EveryInstance"/>, needs a queue group: from its attribute's QueueGroup,
-    /// from this, or from <see cref="ServiceName"/>.
+    /// one. When null, <see cref="ServiceName"/> is used. Every consumer and request handler needs a queue group:
+    /// from its attribute's QueueGroup, from this, or from <see cref="ServiceName"/>.
     /// </summary>
     public string? DefaultQueueGroup { get; set; }
 

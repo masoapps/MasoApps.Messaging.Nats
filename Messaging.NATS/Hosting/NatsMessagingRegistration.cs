@@ -5,7 +5,7 @@ using NATS.Client.JetStream.Models;
 namespace Messaging.NATS;
 
 internal sealed record ReplyHandlerRegistration(Type HandlerType, Type RequestType, Type ResponseType, string Subject,
-    string? QueueGroup)
+    string QueueGroup)
 {
     public string ComponentName => $"reply:{Subject}";
 }
@@ -284,29 +284,16 @@ internal sealed partial class NatsMessagingRegistration
 
     /// <summary>
     /// The core queue group of a request handler: the attribute's, then DefaultQueueGroup, then ServiceName, like a
-    /// consumer's. Null when the handler opts out with EveryInstance. Whitespace, which the protocol does not allow,
-    /// becomes "_".
+    /// consumer's. Whitespace, which the protocol does not allow, becomes "_".
     /// </summary>
-    private static string? ReplyQueueGroup(Type type, NatsRequestHandlerAttribute attribute,
+    private static string ReplyQueueGroup(Type type, NatsRequestHandlerAttribute attribute,
         NatsMessagingOptions options)
     {
-        if (attribute.EveryInstance)
-        {
-            if (!string.IsNullOrEmpty(attribute.QueueGroup))
-            {
-                throw new InvalidOperationException(
-                    $"Request handler {type.FullName} sets both QueueGroup and EveryInstance. Set one of them.");
-            }
-
-            return null;
-        }
-
         var queueGroup = new[] { attribute.QueueGroup, options.DefaultQueueGroup, options.ServiceName }
                              .FirstOrDefault(g => !string.IsNullOrEmpty(g))
                          ?? throw new InvalidOperationException(
                              $"Request handler {type.FullName} has no queue group. Set QueueGroup on the attribute, " +
-                             "or DefaultQueueGroup or ServiceName on the options. Set EveryInstance = true to have " +
-                             "every instance answer each request.");
+                             "or DefaultQueueGroup or ServiceName on the options.");
         return WhiteSpace().Replace(queueGroup, "_");
     }
 

@@ -69,20 +69,6 @@ public class RequestReplyTests : NatsTestBase
     }
 
     [TestMethod]
-    public async Task ReplyHandler_WithEveryInstance_AnswersEachRequestOnEveryInstance()
-    {
-        var service = TestNames.Unique("replies");
-        var (first, second) = (new ReplyCounter(), new ReplyCounter());
-        await using var firstHost = await StartCountingAsync<EveryInstanceReplyHandler>(service, first);
-        await using var secondHost = await StartCountingAsync<EveryInstanceReplyHandler>(service, second);
-
-        await RequestManyAsync(firstHost, EveryInstanceReplyHandler.Subject, 5);
-
-        await Eventually.TrueAsync(() => Task.FromResult(first.Calls == 5 && second.Calls == 5),
-            TimeSpan.FromSeconds(5), $"Both instances handle every request (got {first.Calls} and {second.Calls})");
-    }
-
-    [TestMethod]
     public void ReplyHandler_QueueGroup_FallsBackToDefaultQueueGroupThenServiceName_AndCleansWhitespace()
     {
         static string? QueueGroup(Action<NatsMessagingOptions> configure) =>
@@ -104,11 +90,6 @@ public class RequestReplyTests : NatsTestBase
             o.ServiceName = "orders";
             o.HandlerTypes = [typeof(QueueGroupReplyHandler)];
         }));
-        Assert.IsNull(QueueGroup(o =>
-        {
-            o.ServiceName = "orders";
-            o.HandlerTypes = [typeof(EveryInstanceReplyHandler)];
-        }));
     }
 
     [TestMethod]
@@ -118,19 +99,6 @@ public class RequestReplyTests : NatsTestBase
             BindingTests.Register(o => o.HandlerTypes = [typeof(DefaultQueueGroupReplyHandler)]));
 
         StringAssert.Contains(error.Message, "has no queue group");
-        StringAssert.Contains(error.Message, "EveryInstance");
-    }
-
-    [TestMethod]
-    public void ReplyHandler_WithQueueGroupAndEveryInstance_IsRejectedAtRegistration()
-    {
-        var error = Assert.ThrowsExactly<InvalidOperationException>(() => BindingTests.Register(o =>
-        {
-            o.ServiceName = "orders";
-            o.HandlerTypes = [typeof(ConflictingQueueGroupReplyHandler)];
-        }));
-
-        StringAssert.Contains(error.Message, "sets both QueueGroup and EveryInstance");
     }
 
     [TestMethod]

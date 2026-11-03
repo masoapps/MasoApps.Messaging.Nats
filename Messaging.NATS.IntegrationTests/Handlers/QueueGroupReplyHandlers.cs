@@ -36,21 +36,3 @@ public sealed class QueueGroupReplyHandler(ReplyCounter counter) : INatsRequestH
     }
 }
 
-[NatsRequestHandler(Subject = Subject, EveryInstance = true)]
-public sealed class EveryInstanceReplyHandler(ReplyCounter counter) : INatsRequestHandler<PingRequest, PingResponse>
-{
-    public const string Subject = "requestreply.everyinstance";
-
-    public Task<PingResponse> HandleRequestAsync(string subject, PingRequest request)
-    {
-        counter.Add();
-        return Task.FromResult(new PingResponse(request.Payload, nameof(EveryInstanceReplyHandler)));
-    }
-}
-
-[NatsRequestHandler(Subject = "requestreply.conflicting", QueueGroup = "workers", EveryInstance = true)]
-public sealed class ConflictingQueueGroupReplyHandler : INatsRequestHandler<PingRequest, PingResponse>
-{
-    public Task<PingResponse> HandleRequestAsync(string subject, PingRequest request) =>
-        Task.FromResult(new PingResponse(request.Payload, nameof(ConflictingQueueGroupReplyHandler)));
-}

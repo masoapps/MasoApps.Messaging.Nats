@@ -41,7 +41,7 @@ internal sealed class ReplyHandlerWorker
         await using var sub = await _connection.SubscribeCoreAsync<TRequest>(subject, _registration.QueueGroup,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Reply handler {Handler} subscribed to {Subject} (queue group {QueueGroup})",
-            _registration.HandlerType.Name, subject, _registration.QueueGroup ?? "none");
+            _registration.HandlerType.Name, subject, _registration.QueueGroup);
         attempt.Running();
 
         await foreach (var msg in sub.Msgs.ReadAllAsync(cancellationToken).ConfigureAwait(false))
