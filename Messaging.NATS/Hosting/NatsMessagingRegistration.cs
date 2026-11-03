@@ -4,7 +4,8 @@ using NATS.Client.JetStream.Models;
 
 namespace Messaging.NATS;
 
-internal sealed record ReplyHandlerRegistration(Type HandlerType, Type RequestType, Type ResponseType, string Subject)
+internal sealed record ReplyHandlerRegistration(Type HandlerType, Type RequestType, Type ResponseType, string Subject,
+    string QueueGroup)
 {
     public string ComponentName => $"reply:{Subject}";
 }
@@ -72,7 +73,7 @@ internal sealed partial class NatsMessagingRegistration
 
         var replyHandlers = candidates
             .Where(t => t.GetCustomAttribute<NatsRequestHandlerAttribute>() != null)
-            .Select(CreateReplyHandler)
+            .Select(t => CreateReplyHandler(t, options))
             .ToList();
 
         var duplicateReply = replyHandlers.GroupBy(r => r.Subject).FirstOrDefault(g => g.Count() > 1);
@@ -263,7 +264,7 @@ internal sealed partial class NatsMessagingRegistration
         }
     }
 
-    private static ReplyHandlerRegistration CreateReplyHandler(Type type)
+    private static ReplyHandlerRegistration CreateReplyHandler(Type type, NatsMessagingOptions options)
     {
         var attribute = type.GetCustomAttribute<NatsRequestHandlerAttribute>()!;
         var handlerInterface = FindInterface(type, typeof(INatsRequestHandler<,>))
@@ -277,7 +278,23 @@ internal sealed partial class NatsMessagingRegistration
         }
 
         var args = handlerInterface.GetGenericArguments();
-        return new ReplyHandlerRegistration(type, args[0], args[1], attribute.Subject);
+        return new ReplyHandlerRegistration(type, args[0], args[1], attribute.Subject,
+            ReplyQueueGroup(type, attribute, options));
+    }
+
+    /// <summary>
+    /// The core queue group of a request handler: the attribute's, then DefaultQueueGroup, then ServiceName, like a
+    /// consumer's. Whitespace, which the protocol does not allow, becomes "_".
+    /// </summary>
+    private static string ReplyQueueGroup(Type type, NatsRequestHandlerAttribute attribute,
+        NatsMessagingOptions options)
+    {
+        var queueGroup = new[] { attribute.QueueGroup, options.DefaultQueueGroup, options.ServiceName }
+                             .FirstOrDefault(g => !string.IsNullOrEmpty(g))
+                         ?? throw new InvalidOperationException(
+                             $"Request handler {type.FullName} has no queue group. Set QueueGroup on the attribute, " +
+                             "or DefaultQueueGroup or ServiceName on the options.");
+        return WhiteSpace().Replace(queueGroup, "_");
     }
 
     internal static Type? FindInterface(Type type, Type openGeneric) =>
@@ -298,4 +315,7 @@ internal sealed partial class NatsMessagingRegistration
 
     [GeneratedRegex(@"[.*>\\/\s]")]
     private static partial Regex InvalidNameCharacters();
+
+    [GeneratedRegex(@"\s")]
+    private static partial Regex WhiteSpace();
 }

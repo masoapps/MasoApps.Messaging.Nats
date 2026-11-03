@@ -2,6 +2,32 @@
 
 All notable changes to MasoApps.Messaging.Nats. Versions follow semantic versioning.
 
+## 7.0.0 - 2026-11-03
+
+### Breaking changes
+
+- Request handlers always use a core NATS queue group, so one instance of a
+  service answers each request. Before, every instance answered. The group is
+  `NatsRequestHandlerAttribute.QueueGroup`, then `DefaultQueueGroup`, then
+  `ServiceName`. There is no opt-out: `RequestAsync` takes the first reply, so
+  having every instance answer only repeated the work.
+- A request handler with no queue group (none of those set) is rejected at
+  registration, like a consumer.
+- Messages published from handlers now have `X-Correlation-Id` and
+  `X-Causation-Id` headers (see Added).
+- `X-Causation-Id` in `PublishOptions.Headers` or `ScheduleOptions.Headers` is
+  dropped, like the library's other `X-*` headers. Use `CausationId`.
+
+### Added
+
+- Publishes and schedules made inside a handler carry the handled message's
+  correlation id (`X-Correlation-Id`, or its `MessageId` when it has none) and
+  its `MessageId` as `X-Causation-Id`. `PublishOptions.CorrelationId` and an
+  `X-Correlation-Id` in `Headers` still win.
+- `PublishOptions.CausationId`, `ScheduleOptions.CausationId` and
+  `MessageContext<T>.CausationId`.
+- `NatsRequestHandlerAttribute.QueueGroup`.
+
 ## 6.1.2 - 2026-10-26
 
 ### Fixed

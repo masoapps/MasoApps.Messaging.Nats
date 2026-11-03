@@ -71,7 +71,11 @@ public class HostedServiceTests
     [TestMethod]
     public async Task ReplyHandler_StartsThroughTheHostedService()
     {
-        await using var host = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(HostedPingHandler)]);
+        await using var host = await TestHost.StartAsync(o =>
+        {
+            o.ServiceName = TestNames.Unique("hosted");
+            o.HandlerTypes = [typeof(HostedPingHandler)];
+        });
         await host.WaitUntilStartedAsync();
 
         Assert.IsNull(host.Status.Get("dlq"), "No consumers, so no dead-letter component");

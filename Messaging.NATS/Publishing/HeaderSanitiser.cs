@@ -15,6 +15,7 @@ internal static class HeaderSanitiser
     public const string ScheduleTarget = "Nats-Schedule-Target";
 
     public const string CorrelationId = "X-Correlation-Id";
+    public const string CausationId = "X-Causation-Id";
     public const string SentTime = "X-Sent-Time";
     public const string ScheduleId = "X-Schedule-Id";
     public const string ScheduleKey = "X-Schedule-Key";
@@ -38,9 +39,13 @@ internal static class HeaderSanitiser
     public const string LegacyDeferredUntil = "Msg-DeferredUntil";
 
     // Library-owned X-* headers: exact names, then prefixes. X-Stream and X-Stream-Sequence are exact names, so a
-    // user header such as X-Streaming-Mode is kept.
+    // user header such as X-Streaming-Mode is kept. A forwarded X-Causation-Id names the forwarded message's cause,
+    // not this message's, so it is dropped too.
     private static readonly string[] LibraryNames =
-        ["X-Sent-Time", "X-Scheduled-For", "X-Failed-At", "X-Consumer", "X-Delivery-Count", "X-Stream", "X-Stream-Sequence"];
+    [
+        "X-Sent-Time", "X-Scheduled-For", "X-Failed-At", "X-Consumer", "X-Delivery-Count", "X-Stream",
+        "X-Stream-Sequence", CausationId
+    ];
     private static readonly string[] LibraryPrefixes = ["X-Schedule-", "X-Original-", "X-Replay", "X-Failure-"];
 
     // The W3C trace context. A forwarded one points at the upstream producer; the publisher writes its own span's.
@@ -83,13 +88,26 @@ internal static class HeaderSanitiser
         time.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Adds X-Correlation-Id (the option wins over a forwarded one) and X-Sent-Time.
+    /// Adds X-Correlation-Id, X-Causation-Id and X-Sent-Time. X-Correlation-Id is the option, else a forwarded one,
+    /// else the correlation id of the message being handled. X-Causation-Id is the option, else the id of the message
+    /// being handled. Outside a handler, only the option and a forwarded correlation id apply.
     /// </summary>
-    public static void AddCommon(NatsHeaders headers, string? correlationId, DateTimeOffset sentTime)
+    public static void AddCommon(NatsHeaders headers, string? correlationId, string? causationId,
+        DateTimeOffset sentTime)
     {
+        var current = CurrentMessage.Value;
         if (correlationId != null)
         {
             headers[CorrelationId] = correlationId;
+        }
+        else if (current != null && MessageContext<object>.Header(headers, CorrelationId) == null)
+        {
+            headers[CorrelationId] = current.CorrelationId;
+        }
+
+        if ((causationId ?? current?.MessageId) is { } cause)
+        {
+            headers[CausationId] = cause;
         }
 
         headers[SentTime] = FormatTime(sentTime);

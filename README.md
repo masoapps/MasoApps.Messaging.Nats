@@ -87,8 +87,8 @@ The call returns when the stream has stored the message, or throws
 | --- | --- | --- |
 | `NatsUrl` | required | Server URL. Several URLs are comma separated. |
 | `CredsFilePath` | null | NATS credentials file. |
-| `ServiceName` | null | Connection name, consumer owner metadata, and the queue group fallback. Set it: without it the owner is the queue group, so two services that share a queue group and a class name share one durable. |
-| `DefaultQueueGroup` | null | Queue group for attributes that do not set `QueueGroup`. |
+| `ServiceName` | null | Connection name, consumer owner metadata, and the queue group fallback for consumers and request handlers. Set it: without it the owner is the queue group, so two services that share a queue group and a class name share one durable. |
+| `DefaultQueueGroup` | null | Queue group for consumer and request handler attributes that do not set `QueueGroup`. |
 | `HandlerTypes` | empty | Handler classes to register. |
 | `Assemblies` | empty | Assemblies to scan for classes with `[NatsConsumer]` or `[NatsRequestHandler]`. |
 | `StreamDefinitions` | empty | Streams this service declares (see "Streams and provisioning"). |
@@ -112,7 +112,8 @@ The call returns when the stream has stored the message, or throws
 `AddNatsMessaging` checks the options and every attribute, and throws before the
 host starts. Among other things it rejects:
 
-- a missing `NatsUrl`, or a service with consumers and no queue group
+- a missing `NatsUrl`, or a service with consumers or request handlers and no
+  queue group
 - an invalid stream definition, or two declared streams whose subjects overlap
 - a dead-letter subject that `DeadLetterStream` does not capture
 - conflicting consumer-level settings across one class's attributes
@@ -233,6 +234,7 @@ transient. Each message gets its own DI scope.
 | `Headers` | The headers; empty when there are none. |
 | `MessageId` | A stable id for idempotency (below). |
 | `CorrelationId` | `X-Correlation-Id`. |
+| `CausationId` | `X-Causation-Id`: the `MessageId` of the message whose handler published this one (see "Correlation and causation"). |
 | `SentTime` | When the publisher sent it (`X-Sent-Time`), else `EnqueuedTime`. |
 | `EnqueuedTime` | When the stream stored it. For a fired schedule this is the fire time. Millisecond precision. |
 | `DeliveryCount`, `IsRedelivery` | 1 on the first delivery. |
@@ -553,12 +555,33 @@ await publisher.PublishAsync("orders.metrics", order, new PublishOptions { FireA
 `PublishOptions.Headers` is copied, never changed. The copy drops every `Nats-*`
 header and the library's own `X-*` headers (`X-Sent-Time`, `X-Schedule-*`,
 `X-Scheduled-For`, `X-Original-*`, `X-Replay*`, `X-Failure-*`, `X-Failed-At`,
-`X-Stream`, `X-Stream-Sequence`, `X-Consumer`, `X-Delivery-Count`). So a handler
-can forward `context.Headers` without purging a schedule, rolling up a subject or
-being dropped as a duplicate. `traceparent` and `tracestate` are dropped too, so a
-forwarded trace context never hides the current span. The library adds
-`X-Correlation-Id` (`CorrelationId`, else a forwarded one), `X-Sent-Time`, and
-the `traceparent` of the publish span (else of `Activity.Current`).
+`X-Stream`, `X-Stream-Sequence`, `X-Consumer`, `X-Delivery-Count`,
+`X-Causation-Id`). So a handler can forward `context.Headers` without purging a
+schedule, rolling up a subject or being dropped as a duplicate. `traceparent` and
+`tracestate` are dropped too, so a forwarded trace context never hides the current
+span. The library adds `X-Correlation-Id` and `X-Causation-Id` (below),
+`X-Sent-Time`, and the `traceparent` of the publish span (else of
+`Activity.Current`).
+
+### Correlation and causation
+
+A publish or schedule made while a handler runs continues the handled message's
+chain. You do not pass anything:
+
+| Header | Value |
+| --- | --- |
+| `X-Correlation-Id` | `CorrelationId` if set. Else an `X-Correlation-Id` in `Headers`. Else, inside a handler, the handled message's correlation id, or its `MessageId` when it has none. |
+| `X-Causation-Id` | `CausationId` if set. Else, inside a handler, the handled message's `MessageId`. |
+
+So every message in a chain has the same correlation id, and each one names its
+parent. A chain that starts without a correlation id takes the first handled
+message's `MessageId`. Outside a handler (an HTTP request, a background job),
+nothing is added unless you set the options. A fired schedule carries the headers
+of the call that made it.
+
+"Inside a handler" means the async flow of `HandleAsync` (`INatsHandler<T>` and
+the 4.x `INatsConsumer<T>`), including tasks it starts. Request handlers do not
+set it. Set `CorrelationId` to start a new chain from inside a handler.
 
 ### The 4.x overload
 
@@ -1037,7 +1060,7 @@ never deletes a consumer.
 
 ## Request/reply and the cache
 
-A request handler (core NATS, unchanged from 4.x):
+A request handler, on core NATS:
 
 ```csharp
 [NatsRequestHandler(Subject = "prices.get")]
@@ -1053,8 +1076,24 @@ var price = await publisher.RequestAsync<PriceRequest, PriceResponse>("prices.ge
     timeout: TimeSpan.FromSeconds(2));
 ```
 
-Request handlers do not use a queue group: every instance of the service answers
-each request, and the caller takes the first reply.
+The instances of a service share a core NATS queue group, so one instance
+answers each request. A handler with side effects runs once per request:
+
+```csharp
+[NatsRequestHandler(Subject = "orders.reserve")]
+public sealed class ReserveHandler(IStockService stock) : INatsRequestHandler<ReserveRequest, ReserveResponse>
+{
+    public Task<ReserveResponse> HandleRequestAsync(string subject, ReserveRequest request) =>
+        stock.ReserveAsync(request);
+}
+```
+
+| Attribute property | Default | Meaning |
+| --- | --- | --- |
+| `Subject` | required | The request subject. |
+| `QueueGroup` | `DefaultQueueGroup`, then `ServiceName` | The queue group. Instances that share it take turns. Whitespace becomes `_`. |
+
+A request handler with no queue group is rejected at registration.
 
 `NatsCacheFactory` (a singleton) gives a key-value cache on a JetStream KV bucket:
 

@@ -15,9 +15,16 @@ public sealed record PublishOptions
     public string? MessageId { get; init; }
 
     /// <summary>
-    /// Sent as the X-Correlation-Id header. When null, an X-Correlation-Id in <see cref="Headers"/> is kept.
+    /// Sent as the X-Correlation-Id header. When null, an X-Correlation-Id in <see cref="Headers"/> is kept, and
+    /// inside a handler the handled message's correlation id is used (its message id when it has none).
     /// </summary>
     public string? CorrelationId { get; init; }
+
+    /// <summary>
+    /// Sent as the X-Causation-Id header. When null, inside a handler the handled message's
+    /// <see cref="MessageContext{T}.MessageId"/> is used; outside a handler no X-Causation-Id is sent.
+    /// </summary>
+    public string? CausationId { get; init; }
 
     /// <summary>
     /// Extra headers. They are copied, never changed. Nats-* headers and the library's own X-* headers are dropped,
@@ -90,9 +97,16 @@ public sealed record ScheduleOptions
     public string? ScheduleId { get; init; }
 
     /// <summary>
-    /// Sent as the X-Correlation-Id header, and copied onto the fired message.
+    /// Sent as the X-Correlation-Id header, and copied onto the fired message. When null, it is found as for
+    /// <see cref="PublishOptions.CorrelationId"/>.
     /// </summary>
     public string? CorrelationId { get; init; }
+
+    /// <summary>
+    /// Sent as the X-Causation-Id header, and copied onto the fired message. When null, it is found as for
+    /// <see cref="PublishOptions.CausationId"/>.
+    /// </summary>
+    public string? CausationId { get; init; }
 
     /// <summary>
     /// Extra headers, sanitised like <see cref="PublishOptions.Headers"/>. They are copied onto the fired message.

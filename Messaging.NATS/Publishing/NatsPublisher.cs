@@ -74,7 +74,7 @@ public class NatsPublisher : IPublisher
             headers[HeaderSanitiser.MessageId] = messageId;
         }
 
-        HeaderSanitiser.AddCommon(headers, options?.CorrelationId, DateTimeOffset.UtcNow);
+        HeaderSanitiser.AddCommon(headers, options?.CorrelationId, options?.CausationId, DateTimeOffset.UtcNow);
 
         using var activity = NatsMessagingTelemetry.StartProducer("publish", subject, messageId);
         activity?.SetTag(NatsMessagingTelemetry.BodySize, payload.Length);
@@ -211,7 +211,7 @@ public class NatsPublisher : IPublisher
             headers[HeaderSanitiser.ScheduleKey] = key;
         }
 
-        HeaderSanitiser.AddCommon(headers, options?.CorrelationId, now);
+        HeaderSanitiser.AddCommon(headers, options?.CorrelationId, options?.CausationId, now);
 
         // The scheduler copies traceparent onto the fired message, so its handler joins this trace.
         NatsMessagingTelemetry.Inject(headers, activity);

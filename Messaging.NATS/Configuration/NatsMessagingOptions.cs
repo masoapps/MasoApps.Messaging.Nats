@@ -40,9 +40,9 @@ public class NatsMessagingOptions
     public Type[] HandlerTypes { get; set; } = Array.Empty<Type>();
 
     /// <summary>
-    /// Default queue group (durable name prefix) for consumers whose attribute does not set one.
-    /// When null, <see cref="ServiceName"/> is used. Every consumer needs a queue group: from
-    /// <see cref="NatsConsumerAttribute.QueueGroup"/>, from this, or from <see cref="ServiceName"/>.
+    /// Default queue group for consumers (the durable name prefix) and request handlers whose attribute does not set
+    /// one. When null, <see cref="ServiceName"/> is used. Every consumer and request handler needs a queue group:
+    /// from its attribute's QueueGroup, from this, or from <see cref="ServiceName"/>.
     /// </summary>
     public string? DefaultQueueGroup { get; set; }
 
