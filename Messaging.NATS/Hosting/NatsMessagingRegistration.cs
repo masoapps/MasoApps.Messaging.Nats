@@ -73,7 +73,7 @@ internal sealed partial class NatsMessagingRegistration
 
         var replyHandlers = candidates
             .Where(t => t.GetCustomAttribute<NatsRequestHandlerAttribute>() != null)
-            .Select(CreateReplyHandler)
+            .Select(t => CreateReplyHandler(t, options))
             .ToList();
 
         var duplicateReply = replyHandlers.GroupBy(r => r.Subject).FirstOrDefault(g => g.Count() > 1);
@@ -264,7 +264,7 @@ internal sealed partial class NatsMessagingRegistration
         }
     }
 
-    private static ReplyHandlerRegistration CreateReplyHandler(Type type)
+    private static ReplyHandlerRegistration CreateReplyHandler(Type type, NatsMessagingOptions options)
     {
         var attribute = type.GetCustomAttribute<NatsRequestHandlerAttribute>()!;
         var handlerInterface = FindInterface(type, typeof(INatsRequestHandler<,>))
@@ -277,16 +277,37 @@ internal sealed partial class NatsMessagingRegistration
                 $"Request handler {type.FullName} has a missing or invalid Subject '{attribute.Subject}'");
         }
 
-        if (attribute.QueueGroup != null &&
-            (attribute.QueueGroup.Length == 0 || attribute.QueueGroup.Any(char.IsWhiteSpace)))
+        var args = handlerInterface.GetGenericArguments();
+        return new ReplyHandlerRegistration(type, args[0], args[1], attribute.Subject,
+            ReplyQueueGroup(type, attribute, options));
+    }
+
+    /// <summary>
+    /// The core queue group of a request handler: the attribute's, then DefaultQueueGroup, then ServiceName, like a
+    /// consumer's. Null when the handler opts out with EveryInstance. Whitespace, which the protocol does not allow,
+    /// becomes "_".
+    /// </summary>
+    private static string? ReplyQueueGroup(Type type, NatsRequestHandlerAttribute attribute,
+        NatsMessagingOptions options)
+    {
+        if (attribute.EveryInstance)
         {
-            throw new InvalidOperationException(
-                $"Request handler {type.FullName} has an invalid QueueGroup '{attribute.QueueGroup}': it must be " +
-                "null, or non-empty with no whitespace");
+            if (!string.IsNullOrEmpty(attribute.QueueGroup))
+            {
+                throw new InvalidOperationException(
+                    $"Request handler {type.FullName} sets both QueueGroup and EveryInstance. Set one of them.");
+            }
+
+            return null;
         }
 
-        var args = handlerInterface.GetGenericArguments();
-        return new ReplyHandlerRegistration(type, args[0], args[1], attribute.Subject, attribute.QueueGroup);
+        var queueGroup = new[] { attribute.QueueGroup, options.DefaultQueueGroup, options.ServiceName }
+                             .FirstOrDefault(g => !string.IsNullOrEmpty(g))
+                         ?? throw new InvalidOperationException(
+                             $"Request handler {type.FullName} has no queue group. Set QueueGroup on the attribute, " +
+                             "or DefaultQueueGroup or ServiceName on the options. Set EveryInstance = true to have " +
+                             "every instance answer each request.");
+        return WhiteSpace().Replace(queueGroup, "_");
     }
 
     internal static Type? FindInterface(Type type, Type openGeneric) =>
@@ -307,4 +328,7 @@ internal sealed partial class NatsMessagingRegistration
 
     [GeneratedRegex(@"[.*>\\/\s]")]
     private static partial Regex InvalidNameCharacters();
+
+    [GeneratedRegex(@"\s")]
+    private static partial Regex WhiteSpace();
 }

@@ -11,7 +11,7 @@ public class RequestReplyTests : NatsTestBase
     [TestMethod]
     public async Task ReplyHandler_RespondsToRequest()
     {
-        await using var host = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(TestRequestReplyHandler)]);
+        await using var host = await TestHost.StartAsync(o => Replies(o, typeof(TestRequestReplyHandler)));
         await host.WaitUntilStartedAsync();
 
         var response = await host.Publisher.RequestAsync<PingRequest, PingResponse>(TestRequestReplyHandler.Subject,
@@ -25,7 +25,7 @@ public class RequestReplyTests : NatsTestBase
     [TestMethod]
     public async Task ReplyHandler_FailingRequest_DoesNotStopTheSubscription()
     {
-        await using var host = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(TestRequestReplyHandler)]);
+        await using var host = await TestHost.StartAsync(o => Replies(o, typeof(TestRequestReplyHandler)));
         await host.WaitUntilStartedAsync();
 
         await Assert.ThrowsAsync<NatsNoReplyException>(() => host.Publisher.RequestAsync<PingRequest, PingResponse>(
@@ -38,68 +38,106 @@ public class RequestReplyTests : NatsTestBase
     }
 
     [TestMethod]
-    public async Task ReplyHandler_WithQueueGroup_AnswersEachRequestOnOneInstance()
+    public async Task ReplyHandler_ByDefault_AnswersEachRequestOnOneInstanceOfTheService()
     {
-        const int requests = 40;
-        var first = new ReplyCounter();
-        var second = new ReplyCounter();
-        await using var firstHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(QueueGroupReplyHandler)],
-            services => services.AddSingleton(first));
-        await using var secondHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(QueueGroupReplyHandler)],
-            services => services.AddSingleton(second));
-        await firstHost.WaitUntilStartedAsync();
-        await secondHost.WaitUntilStartedAsync();
+        var service = TestNames.Unique("replies");
+        var (first, second) = (new ReplyCounter(), new ReplyCounter());
+        await using var firstHost = await StartCountingAsync<DefaultQueueGroupReplyHandler>(service, first);
+        await using var secondHost = await StartCountingAsync<DefaultQueueGroupReplyHandler>(service, second);
 
-        for (var i = 0; i < requests; i++)
-        {
-            var response = await firstHost.Publisher.RequestAsync<PingRequest, PingResponse>(
-                QueueGroupReplyHandler.Subject, new PingRequest($"r{i}"));
-            Assert.AreEqual($"r{i}", response!.Payload);
-        }
+        await RequestManyAsync(firstHost, DefaultQueueGroupReplyHandler.Subject, 40);
 
         await Task.Delay(300);
-        Assert.AreEqual(requests, first.Calls + second.Calls, "Each request is handled once");
+        Assert.AreEqual(40, first.Calls + second.Calls, "Each request is handled once");
         Assert.IsGreaterThan(0, first.Calls, "The queue group spreads requests over both instances");
         Assert.IsGreaterThan(0, second.Calls, "The queue group spreads requests over both instances");
     }
 
     [TestMethod]
-    public async Task ReplyHandler_WithoutQueueGroup_AnswersEachRequestOnEveryInstance()
+    public async Task ReplyHandler_WithAnExplicitQueueGroup_IsSharedAcrossServices()
     {
-        const int requests = 5;
-        var first = new ReplyCounter();
-        var second = new ReplyCounter();
-        await using var firstHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(NoQueueGroupReplyHandler)],
-            services => services.AddSingleton(first));
-        await using var secondHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(NoQueueGroupReplyHandler)],
-            services => services.AddSingleton(second));
-        await firstHost.WaitUntilStartedAsync();
-        await secondHost.WaitUntilStartedAsync();
+        var (first, second) = (new ReplyCounter(), new ReplyCounter());
+        await using var firstHost = await StartCountingAsync<QueueGroupReplyHandler>(TestNames.Unique("a"), first);
+        await using var secondHost = await StartCountingAsync<QueueGroupReplyHandler>(TestNames.Unique("b"), second);
 
-        for (var i = 0; i < requests; i++)
-        {
-            await firstHost.Publisher.RequestAsync<PingRequest, PingResponse>(NoQueueGroupReplyHandler.Subject,
-                new PingRequest($"r{i}"));
-        }
+        await RequestManyAsync(firstHost, QueueGroupReplyHandler.Subject, 40);
 
-        await Eventually.TrueAsync(() => Task.FromResult(first.Calls == requests && second.Calls == requests),
+        await Task.Delay(300);
+        Assert.AreEqual(40, first.Calls + second.Calls, "Each request is handled once");
+        Assert.IsGreaterThan(0, first.Calls, "The queue group spreads requests over both instances");
+        Assert.IsGreaterThan(0, second.Calls, "The queue group spreads requests over both instances");
+    }
+
+    [TestMethod]
+    public async Task ReplyHandler_WithEveryInstance_AnswersEachRequestOnEveryInstance()
+    {
+        var service = TestNames.Unique("replies");
+        var (first, second) = (new ReplyCounter(), new ReplyCounter());
+        await using var firstHost = await StartCountingAsync<EveryInstanceReplyHandler>(service, first);
+        await using var secondHost = await StartCountingAsync<EveryInstanceReplyHandler>(service, second);
+
+        await RequestManyAsync(firstHost, EveryInstanceReplyHandler.Subject, 5);
+
+        await Eventually.TrueAsync(() => Task.FromResult(first.Calls == 5 && second.Calls == 5),
             TimeSpan.FromSeconds(5), $"Both instances handle every request (got {first.Calls} and {second.Calls})");
     }
 
     [TestMethod]
-    public void ReplyHandler_WithWhitespaceInQueueGroup_IsRejectedAtRegistration()
+    public void ReplyHandler_QueueGroup_FallsBackToDefaultQueueGroupThenServiceName_AndCleansWhitespace()
+    {
+        static string? QueueGroup(Action<NatsMessagingOptions> configure) =>
+            BindingTests.Register(configure).ReplyHandlers.Single().QueueGroup;
+
+        Assert.AreEqual("orders_api", QueueGroup(o =>
+        {
+            o.ServiceName = "orders api";
+            o.HandlerTypes = [typeof(DefaultQueueGroupReplyHandler)];
+        }));
+        Assert.AreEqual("workers", QueueGroup(o =>
+        {
+            o.ServiceName = "orders";
+            o.DefaultQueueGroup = "workers";
+            o.HandlerTypes = [typeof(DefaultQueueGroupReplyHandler)];
+        }));
+        Assert.AreEqual("requestreply-workers", QueueGroup(o =>
+        {
+            o.ServiceName = "orders";
+            o.HandlerTypes = [typeof(QueueGroupReplyHandler)];
+        }));
+        Assert.IsNull(QueueGroup(o =>
+        {
+            o.ServiceName = "orders";
+            o.HandlerTypes = [typeof(EveryInstanceReplyHandler)];
+        }));
+    }
+
+    [TestMethod]
+    public void ReplyHandler_WithoutAnyQueueGroup_IsRejectedAtRegistration()
     {
         var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
-            BindingTests.Register(o => o.HandlerTypes = [typeof(BadQueueGroupReplyHandler)]));
+            BindingTests.Register(o => o.HandlerTypes = [typeof(DefaultQueueGroupReplyHandler)]));
 
-        StringAssert.Contains(error.Message, "QueueGroup 'has space'");
+        StringAssert.Contains(error.Message, "has no queue group");
+        StringAssert.Contains(error.Message, "EveryInstance");
+    }
+
+    [TestMethod]
+    public void ReplyHandler_WithQueueGroupAndEveryInstance_IsRejectedAtRegistration()
+    {
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => BindingTests.Register(o =>
+        {
+            o.ServiceName = "orders";
+            o.HandlerTypes = [typeof(ConflictingQueueGroupReplyHandler)];
+        }));
+
+        StringAssert.Contains(error.Message, "sets both QueueGroup and EveryInstance");
     }
 
     [TestMethod]
     public async Task RequestHandledWhileTheHostStops_StillGetsItsReply()
     {
         var gate = new ReplyGate();
-        await using var host = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(GatedReplyHandler)],
+        await using var host = await TestHost.StartAsync(o => Replies(o, typeof(GatedReplyHandler)),
             services => services.AddSingleton(gate));
         await host.WaitUntilStartedAsync();
 
@@ -149,7 +187,7 @@ public class RequestReplyTests : NatsTestBase
     public async Task Stop_LeavesQueuedRequestsUnhandled_AndReturnsWithoutWaitingForThem()
     {
         var backlog = new ReplyBacklog();
-        await using var host = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(BacklogReplyHandler)],
+        await using var host = await TestHost.StartAsync(o => Replies(o, typeof(BacklogReplyHandler)),
             services => services.AddSingleton(backlog));
         await host.WaitUntilStartedAsync();
 
@@ -192,5 +230,32 @@ public class RequestReplyTests : NatsTestBase
                 new PingRequest("hello"),
                 timeout: TimeSpan.FromSeconds(2));
         });
+    }
+
+    private static void Replies(NatsMessagingOptions options, params Type[] handlerTypes)
+    {
+        options.ServiceName = TestNames.Unique("replies");
+        options.HandlerTypes = handlerTypes;
+    }
+
+    private static async Task<TestHost> StartCountingAsync<THandler>(string serviceName, ReplyCounter counter)
+    {
+        var host = await TestHost.StartAsync(o =>
+            {
+                o.ServiceName = serviceName;
+                o.HandlerTypes = [typeof(THandler)];
+            },
+            services => services.AddSingleton(counter));
+        await host.WaitUntilStartedAsync();
+        return host;
+    }
+
+    private static async Task RequestManyAsync(TestHost host, string subject, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var response = await host.Publisher.RequestAsync<PingRequest, PingResponse>(subject, new PingRequest($"r{i}"));
+            Assert.AreEqual($"r{i}", response!.Payload);
+        }
     }
 }

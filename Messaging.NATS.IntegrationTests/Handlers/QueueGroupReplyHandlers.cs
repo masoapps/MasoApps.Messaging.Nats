@@ -12,6 +12,18 @@ public sealed class ReplyCounter
     public void Add() => Interlocked.Increment(ref _calls);
 }
 
+[NatsRequestHandler(Subject = Subject)]
+public sealed class DefaultQueueGroupReplyHandler(ReplyCounter counter) : INatsRequestHandler<PingRequest, PingResponse>
+{
+    public const string Subject = "requestreply.defaultqueuegroup";
+
+    public Task<PingResponse> HandleRequestAsync(string subject, PingRequest request)
+    {
+        counter.Add();
+        return Task.FromResult(new PingResponse(request.Payload, nameof(DefaultQueueGroupReplyHandler)));
+    }
+}
+
 [NatsRequestHandler(Subject = Subject, QueueGroup = "requestreply-workers")]
 public sealed class QueueGroupReplyHandler(ReplyCounter counter) : INatsRequestHandler<PingRequest, PingResponse>
 {
@@ -24,21 +36,21 @@ public sealed class QueueGroupReplyHandler(ReplyCounter counter) : INatsRequestH
     }
 }
 
-[NatsRequestHandler(Subject = Subject)]
-public sealed class NoQueueGroupReplyHandler(ReplyCounter counter) : INatsRequestHandler<PingRequest, PingResponse>
+[NatsRequestHandler(Subject = Subject, EveryInstance = true)]
+public sealed class EveryInstanceReplyHandler(ReplyCounter counter) : INatsRequestHandler<PingRequest, PingResponse>
 {
-    public const string Subject = "requestreply.noqueuegroup";
+    public const string Subject = "requestreply.everyinstance";
 
     public Task<PingResponse> HandleRequestAsync(string subject, PingRequest request)
     {
         counter.Add();
-        return Task.FromResult(new PingResponse(request.Payload, nameof(NoQueueGroupReplyHandler)));
+        return Task.FromResult(new PingResponse(request.Payload, nameof(EveryInstanceReplyHandler)));
     }
 }
 
-[NatsRequestHandler(Subject = "requestreply.badqueuegroup", QueueGroup = "has space")]
-public sealed class BadQueueGroupReplyHandler : INatsRequestHandler<PingRequest, PingResponse>
+[NatsRequestHandler(Subject = "requestreply.conflicting", QueueGroup = "workers", EveryInstance = true)]
+public sealed class ConflictingQueueGroupReplyHandler : INatsRequestHandler<PingRequest, PingResponse>
 {
     public Task<PingResponse> HandleRequestAsync(string subject, PingRequest request) =>
-        Task.FromResult(new PingResponse(request.Payload, nameof(BadQueueGroupReplyHandler)));
+        Task.FromResult(new PingResponse(request.Payload, nameof(ConflictingQueueGroupReplyHandler)));
 }

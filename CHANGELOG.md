@@ -2,7 +2,21 @@
 
 All notable changes to MasoApps.Messaging.Nats. Versions follow semantic versioning.
 
-## 6.2.0 - 2026-11-03
+## 7.0.0 - 2026-11-03
+
+### Breaking changes
+
+- Request handlers use a core NATS queue group by default, so one instance of a
+  service answers each request. Before, every instance answered. The group is
+  `NatsRequestHandlerAttribute.QueueGroup`, then `DefaultQueueGroup`, then
+  `ServiceName`. Set `EveryInstance = true` on the attribute for the old
+  behaviour.
+- A request handler with no queue group (none of those set, and no
+  `EveryInstance`) is rejected at registration, like a consumer.
+- Messages published from handlers now have `X-Correlation-Id` and
+  `X-Causation-Id` headers (see Added).
+- `X-Causation-Id` in `PublishOptions.Headers` or `ScheduleOptions.Headers` is
+  dropped, like the library's other `X-*` headers. Use `CausationId`.
 
 ### Added
 
@@ -12,15 +26,8 @@ All notable changes to MasoApps.Messaging.Nats. Versions follow semantic version
   `X-Correlation-Id` in `Headers` still win.
 - `PublishOptions.CausationId`, `ScheduleOptions.CausationId` and
   `MessageContext<T>.CausationId`.
-- `NatsRequestHandlerAttribute.QueueGroup`. Instances that share it take turns,
-  so one answers each request. The default stays: every instance answers.
-
-### Changed
-
-- Messages published from handlers now have `X-Correlation-Id` and
-  `X-Causation-Id` headers they did not have before.
-- `X-Causation-Id` in `PublishOptions.Headers` or `ScheduleOptions.Headers` is
-  dropped, like the library's other `X-*` headers. Use `CausationId`.
+- `NatsRequestHandlerAttribute.QueueGroup` and
+  `NatsRequestHandlerAttribute.EveryInstance`.
 
 ## 6.1.2 - 2026-10-26
 

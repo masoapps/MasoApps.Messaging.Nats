@@ -87,8 +87,8 @@ The call returns when the stream has stored the message, or throws
 | --- | --- | --- |
 | `NatsUrl` | required | Server URL. Several URLs are comma separated. |
 | `CredsFilePath` | null | NATS credentials file. |
-| `ServiceName` | null | Connection name, consumer owner metadata, and the queue group fallback. Set it: without it the owner is the queue group, so two services that share a queue group and a class name share one durable. |
-| `DefaultQueueGroup` | null | Queue group for attributes that do not set `QueueGroup`. |
+| `ServiceName` | null | Connection name, consumer owner metadata, and the queue group fallback for consumers and request handlers. Set it: without it the owner is the queue group, so two services that share a queue group and a class name share one durable. |
+| `DefaultQueueGroup` | null | Queue group for consumer and request handler attributes that do not set `QueueGroup`. |
 | `HandlerTypes` | empty | Handler classes to register. |
 | `Assemblies` | empty | Assemblies to scan for classes with `[NatsConsumer]` or `[NatsRequestHandler]`. |
 | `StreamDefinitions` | empty | Streams this service declares (see "Streams and provisioning"). |
@@ -112,7 +112,9 @@ The call returns when the stream has stored the message, or throws
 `AddNatsMessaging` checks the options and every attribute, and throws before the
 host starts. Among other things it rejects:
 
-- a missing `NatsUrl`, or a service with consumers and no queue group
+- a missing `NatsUrl`, or a service with consumers or request handlers and no
+  queue group
+- a request handler that sets both `QueueGroup` and `EveryInstance`
 - an invalid stream definition, or two declared streams whose subjects overlap
 - a dead-letter subject that `DeadLetterStream` does not capture
 - conflicting consumer-level settings across one class's attributes
@@ -1059,7 +1061,7 @@ never deletes a consumer.
 
 ## Request/reply and the cache
 
-A request handler (core NATS, unchanged from 4.x):
+A request handler, on core NATS:
 
 ```csharp
 [NatsRequestHandler(Subject = "prices.get")]
@@ -1075,12 +1077,11 @@ var price = await publisher.RequestAsync<PriceRequest, PriceResponse>("prices.ge
     timeout: TimeSpan.FromSeconds(2));
 ```
 
-By default every instance of the service answers each request, and the caller
-takes the first reply. Set `QueueGroup` so that one instance answers each request
-instead. Do this when the handler has side effects or costs much to run:
+The instances of a service share a core NATS queue group, so one instance
+answers each request. A handler with side effects runs once per request:
 
 ```csharp
-[NatsRequestHandler(Subject = "orders.reserve", QueueGroup = "orders-api")]
+[NatsRequestHandler(Subject = "orders.reserve")]
 public sealed class ReserveHandler(IStockService stock) : INatsRequestHandler<ReserveRequest, ReserveResponse>
 {
     public Task<ReserveResponse> HandleRequestAsync(string subject, ReserveRequest request) =>
@@ -1088,9 +1089,15 @@ public sealed class ReserveHandler(IStockService stock) : INatsRequestHandler<Re
 }
 ```
 
-`QueueGroup` is a core NATS queue group, separate from the consumer `QueueGroup`.
-It must have no whitespace. It does not fall back to `DefaultQueueGroup` or
-`ServiceName`.
+| Attribute property | Default | Meaning |
+| --- | --- | --- |
+| `Subject` | required | The request subject. |
+| `QueueGroup` | `DefaultQueueGroup`, then `ServiceName` | The queue group. Instances that share it take turns. Whitespace becomes `_`. |
+| `EveryInstance` | false | True: no queue group. Every instance answers each request and the caller takes the first reply. Cannot be combined with `QueueGroup`. |
+
+Use `EveryInstance = true` only for handlers without side effects whose answer
+differs per instance, such as a per-instance status. A request handler with no
+queue group and no `EveryInstance` is rejected at registration.
 
 `NatsCacheFactory` (a singleton) gives a key-value cache on a JetStream KV bucket:
 

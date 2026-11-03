@@ -304,7 +304,7 @@ public sealed class PriceHandler : INatsRequestHandler<PriceRequest, PriceRespon
         Task.FromResult(new PriceResponse(request.Sku, 9.99m));
 }
 
-[NatsRequestHandler(Subject = "orders.reserve", QueueGroup = "orders-api")]
+[NatsRequestHandler(Subject = "orders.reserve")]
 public sealed class ReserveHandler(IStockService stock) : INatsRequestHandler<ReserveRequest, ReserveResponse>
 {
     public Task<ReserveResponse> HandleRequestAsync(string subject, ReserveRequest request) =>
