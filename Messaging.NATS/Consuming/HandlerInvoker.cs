@@ -67,6 +67,7 @@ internal static class HandlerInvoker
             var context = new MessageContext<T>(data, msg.Subject, msg.Headers, (int)metadata.NumDelivered,
                 metadata.Stream, metadata.Consumer, metadata.Sequence.Stream, metadata.Timestamp);
 
+            using var current = CurrentMessage.Enter(context.MessageId, context.CorrelationId);
             await using var scope = scopes.CreateAsyncScope();
             var handler = (INatsHandler<T>)scope.ServiceProvider.GetRequiredService(handlerType);
             await handler.HandleAsync(context, cancellationToken).ConfigureAwait(false);
@@ -84,6 +85,11 @@ internal static class HandlerInvoker
             var (data, error) = Deserialize(_deserializer, msg.Data);
             var adapter = new LegacyMsgAdapter<T>(msg, data, error, settlement);
 
+            var metadata = msg.Metadata;
+            using var current = CurrentMessage.Enter(
+                MessageContext<T>.ResolveMessageId(msg.Headers, metadata?.Stream ?? string.Empty,
+                    metadata?.Sequence.Stream ?? 0),
+                MessageContext<T>.Header(msg.Headers, HeaderSanitiser.CorrelationId));
             await using var scope = scopes.CreateAsyncScope();
             var handler = (INatsConsumer<T>)scope.ServiceProvider.GetRequiredService(handlerType);
             await handler.HandleMessageAsync(adapter, cancellationToken).ConfigureAwait(false);

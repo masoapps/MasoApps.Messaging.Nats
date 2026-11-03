@@ -22,6 +22,7 @@ public sealed class MessageContext<T>
         EnqueuedTime = enqueuedTime;
 
         CorrelationId = Header(Headers, HeaderSanitiser.CorrelationId);
+        CausationId = Header(Headers, HeaderSanitiser.CausationId);
         SentTime = ParseTime(Header(Headers, HeaderSanitiser.SentTime)) ?? enqueuedTime;
         ScheduleId = Header(Headers, HeaderSanitiser.ScheduleId);
         ScheduleKey = Header(Headers, HeaderSanitiser.ScheduleKey);
@@ -51,9 +52,16 @@ public sealed class MessageContext<T>
     public string MessageId { get; }
 
     /// <summary>
-    /// The X-Correlation-Id header.
+    /// The X-Correlation-Id header. Publishes and schedules made inside a handler carry the handled message's
+    /// correlation id, or its <see cref="MessageId"/> when it has none.
     /// </summary>
     public string? CorrelationId { get; }
+
+    /// <summary>
+    /// The X-Causation-Id header: the <see cref="MessageId"/> of the message whose handler published this one. Null
+    /// for a message published outside a handler without <see cref="PublishOptions.CausationId"/>.
+    /// </summary>
+    public string? CausationId { get; }
 
     /// <summary>
     /// When the publisher sent the message (X-Sent-Time, also set when a schedule was created); otherwise

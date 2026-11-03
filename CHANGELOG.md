@@ -2,6 +2,26 @@
 
 All notable changes to MasoApps.Messaging.Nats. Versions follow semantic versioning.
 
+## 6.2.0 - 2026-11-03
+
+### Added
+
+- Publishes and schedules made inside a handler carry the handled message's
+  correlation id (`X-Correlation-Id`, or its `MessageId` when it has none) and
+  its `MessageId` as `X-Causation-Id`. `PublishOptions.CorrelationId` and an
+  `X-Correlation-Id` in `Headers` still win.
+- `PublishOptions.CausationId`, `ScheduleOptions.CausationId` and
+  `MessageContext<T>.CausationId`.
+- `NatsRequestHandlerAttribute.QueueGroup`. Instances that share it take turns,
+  so one answers each request. The default stays: every instance answers.
+
+### Changed
+
+- Messages published from handlers now have `X-Correlation-Id` and
+  `X-Causation-Id` headers they did not have before.
+- `X-Causation-Id` in `PublishOptions.Headers` or `ScheduleOptions.Headers` is
+  dropped, like the library's other `X-*` headers. Use `CausationId`.
+
 ## 6.1.2 - 2026-10-26
 
 ### Fixed

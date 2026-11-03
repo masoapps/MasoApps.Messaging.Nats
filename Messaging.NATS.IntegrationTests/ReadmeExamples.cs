@@ -31,6 +31,15 @@ public sealed record PriceResponse(string Sku, decimal Price);
 
 public sealed record Stock(int Count);
 
+public sealed record ReserveRequest(string OrderId);
+
+public sealed record ReserveResponse(bool Reserved);
+
+public interface IStockService
+{
+    Task<ReserveResponse> ReserveAsync(ReserveRequest request);
+}
+
 public interface IOrderService
 {
     Task ReserveStockAsync(OrderPlaced order, string idempotencyKey, CancellationToken cancellationToken);
@@ -293,6 +302,13 @@ public sealed class PriceHandler : INatsRequestHandler<PriceRequest, PriceRespon
 {
     public Task<PriceResponse> HandleRequestAsync(string subject, PriceRequest request) =>
         Task.FromResult(new PriceResponse(request.Sku, 9.99m));
+}
+
+[NatsRequestHandler(Subject = "orders.reserve", QueueGroup = "orders-api")]
+public sealed class ReserveHandler(IStockService stock) : INatsRequestHandler<ReserveRequest, ReserveResponse>
+{
+    public Task<ReserveResponse> HandleRequestAsync(string subject, ReserveRequest request) =>
+        stock.ReserveAsync(request);
 }
 
 public sealed class Prices(IPublisher publisher, NatsCacheFactory caches)

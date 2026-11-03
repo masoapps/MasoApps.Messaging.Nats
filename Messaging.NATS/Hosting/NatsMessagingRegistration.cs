@@ -4,7 +4,8 @@ using NATS.Client.JetStream.Models;
 
 namespace Messaging.NATS;
 
-internal sealed record ReplyHandlerRegistration(Type HandlerType, Type RequestType, Type ResponseType, string Subject)
+internal sealed record ReplyHandlerRegistration(Type HandlerType, Type RequestType, Type ResponseType, string Subject,
+    string? QueueGroup)
 {
     public string ComponentName => $"reply:{Subject}";
 }
@@ -276,8 +277,16 @@ internal sealed partial class NatsMessagingRegistration
                 $"Request handler {type.FullName} has a missing or invalid Subject '{attribute.Subject}'");
         }
 
+        if (attribute.QueueGroup != null &&
+            (attribute.QueueGroup.Length == 0 || attribute.QueueGroup.Any(char.IsWhiteSpace)))
+        {
+            throw new InvalidOperationException(
+                $"Request handler {type.FullName} has an invalid QueueGroup '{attribute.QueueGroup}': it must be " +
+                "null, or non-empty with no whitespace");
+        }
+
         var args = handlerInterface.GetGenericArguments();
-        return new ReplyHandlerRegistration(type, args[0], args[1], attribute.Subject);
+        return new ReplyHandlerRegistration(type, args[0], args[1], attribute.Subject, attribute.QueueGroup);
     }
 
     internal static Type? FindInterface(Type type, Type openGeneric) =>

@@ -38,6 +38,64 @@ public class RequestReplyTests : NatsTestBase
     }
 
     [TestMethod]
+    public async Task ReplyHandler_WithQueueGroup_AnswersEachRequestOnOneInstance()
+    {
+        const int requests = 40;
+        var first = new ReplyCounter();
+        var second = new ReplyCounter();
+        await using var firstHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(QueueGroupReplyHandler)],
+            services => services.AddSingleton(first));
+        await using var secondHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(QueueGroupReplyHandler)],
+            services => services.AddSingleton(second));
+        await firstHost.WaitUntilStartedAsync();
+        await secondHost.WaitUntilStartedAsync();
+
+        for (var i = 0; i < requests; i++)
+        {
+            var response = await firstHost.Publisher.RequestAsync<PingRequest, PingResponse>(
+                QueueGroupReplyHandler.Subject, new PingRequest($"r{i}"));
+            Assert.AreEqual($"r{i}", response!.Payload);
+        }
+
+        await Task.Delay(300);
+        Assert.AreEqual(requests, first.Calls + second.Calls, "Each request is handled once");
+        Assert.IsGreaterThan(0, first.Calls, "The queue group spreads requests over both instances");
+        Assert.IsGreaterThan(0, second.Calls, "The queue group spreads requests over both instances");
+    }
+
+    [TestMethod]
+    public async Task ReplyHandler_WithoutQueueGroup_AnswersEachRequestOnEveryInstance()
+    {
+        const int requests = 5;
+        var first = new ReplyCounter();
+        var second = new ReplyCounter();
+        await using var firstHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(NoQueueGroupReplyHandler)],
+            services => services.AddSingleton(first));
+        await using var secondHost = await TestHost.StartAsync(o => o.HandlerTypes = [typeof(NoQueueGroupReplyHandler)],
+            services => services.AddSingleton(second));
+        await firstHost.WaitUntilStartedAsync();
+        await secondHost.WaitUntilStartedAsync();
+
+        for (var i = 0; i < requests; i++)
+        {
+            await firstHost.Publisher.RequestAsync<PingRequest, PingResponse>(NoQueueGroupReplyHandler.Subject,
+                new PingRequest($"r{i}"));
+        }
+
+        await Eventually.TrueAsync(() => Task.FromResult(first.Calls == requests && second.Calls == requests),
+            TimeSpan.FromSeconds(5), $"Both instances handle every request (got {first.Calls} and {second.Calls})");
+    }
+
+    [TestMethod]
+    public void ReplyHandler_WithWhitespaceInQueueGroup_IsRejectedAtRegistration()
+    {
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BindingTests.Register(o => o.HandlerTypes = [typeof(BadQueueGroupReplyHandler)]));
+
+        StringAssert.Contains(error.Message, "QueueGroup 'has space'");
+    }
+
+    [TestMethod]
     public async Task RequestHandledWhileTheHostStops_StillGetsItsReply()
     {
         var gate = new ReplyGate();
